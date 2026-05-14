@@ -6,40 +6,42 @@ once the changes are validated against a real ARM64 Kubernetes cluster.
 
 ## What this branch changes
 
-### 1. CI: Travis CI → GitHub Actions
+The PR is intentionally minimal — only the changes needed to support ARM64.
+CI system and tooling are left as-is (Travis CI remains Travis CI).
 
-The existing `.travis.yml` (Node 12, single-arch `docker build`) is replaced
-by `.github/workflows/build-and-push.yml`, which:
+### 1. Alpine Dockerfile: add `vips-dev`
 
-- Uses `docker/setup-qemu-action` to enable ARM64 cross-compilation on
-  GitHub-hosted AMD64 runners
-- Uses `docker/setup-buildx-action` + `docker/build-push-action` for
-  multi-platform builds
-- Builds `strapi/base` (Debian + Alpine) and `strapi/strapi` for
-  `linux/amd64,linux/arm64`
-- Publishes to Docker Hub only on push to main (not on PRs)
-- Uses GitHub Actions cache (`type=gha`) to speed up layer caching
+`base/alpine/Dockerfile` now installs `vips-dev`, which is required for
+`sharp` (Strapi's image processing library) to work correctly on ARM64.
+
+In practice, `sharp` ships pre-built ARM64 binaries via npm
+(`@img/sharp-linux-arm64`) and does not need to compile — but having `vips-dev`
+present in the base image makes it resilient to cases where the pre-built
+binary is unavailable or stale, falling back to compiling against libvips
+instead of failing.
 
 ### 2. Node versions: 10/12/14 → 20/22
 
-Node 10, 12, and 14 are all end-of-life. Updated to Node 20 LTS (current)
-and Node 22 LTS.
+Node 10, 12, and 14 are all end-of-life. Updated `bin/constants.js` to
+Node 20 LTS (current) and Node 22 LTS. This is a separate improvement
+bundled into the same PR since the old versions don't ship arm64 base
+images at all.
 
-### 3. Alpine Dockerfile: add `vips-dev`
+## What this branch does NOT change
 
-The Alpine base image now installs `vips-dev`, which is required for `sharp`
-(Strapi's image processing library) to compile from source on ARM64 as a
-fallback. In practice, `sharp` ships pre-built ARM64 binaries via npm
-(`@img/sharp-linux-arm64`) and does not need to compile — but having `vips-dev`
-present makes the image resilient to cases where the pre-built binary is
-unavailable or stale.
+- **CI system**: Travis CI remains as-is. Migrating to GitHub Actions is a
+  separate decision for the Strapi maintainers, not part of this PR.
+- **Debian base image**: Only Alpine is affected. The Debian base image
+  (`base/Dockerfile`) already pulls from `node:{version}` which is multi-arch
+  — it should work on ARM64 without changes.
+- **Strapi application logic**: No changes to `strapi/Dockerfile` or
+  `strapi/docker-entrypoint.sh`.
 
 ## Validation status
 
 - [ ] `docker buildx build --platform linux/arm64 ./base/alpine` completes
 - [ ] `sharp` loads successfully on an ARM64 node (no "bindings not found")
 - [ ] Strapi admin UI reachable on a Hetzner CAX node (ARM64, Ampere Altra)
-- [ ] Image push to GHCR from GitHub Actions succeeds
 
 Validation is running against the XMV Solutions basics cluster
 (ARM64, Hetzner CAX). Results will be documented here before the upstream PR
@@ -56,14 +58,14 @@ docker buildx build \
   -t strapi-base-arm64-test:local \
   ./base/alpine
 
-# Inspect the manifest to confirm both architectures
+# Inspect the manifest — both architectures should be listed
 docker buildx imagetools inspect strapi-base-arm64-test:local
 ```
 
 ## Upstream PR plan
 
 Once validated:
-1. Sync fork with `git fetch upstream && git rebase upstream/main`
+1. Sync fork with `git fetch upstream && git rebase upstream/master`
 2. Open PR at https://github.com/strapi/strapi-docker
-3. Reference issue #272 (ARM64 image request)
-4. Include validation evidence (GitHub Actions run logs, `docker manifest inspect` output)
+3. Reference issue #272 (ARM64 image support request)
+4. Include validation evidence (build log, `docker buildx imagetools inspect` output)
