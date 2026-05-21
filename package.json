@@ -12,7 +12,7 @@
     "chalk": "^2.4.2",
     "execa": "^3.1.0",
     "got": "^9.6.0",
-    "semver": "^6.3.0",
+    "semver": "^6.3.1",
     "yargs": "^14.2.0"
   },
   "devDependencies": {
